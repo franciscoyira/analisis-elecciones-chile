@@ -1,0 +1,76 @@
+---
+title: "Análisis polarización política territorial/geográfica en Chile"
+output: html_notebook
+---
+
+```{r setup}
+library(tidyverse)
+library(readxl)
+```
+
+```{r import-data}
+df_raw <- read_excel("data/presidenciales_1989_2020.xlsx")
+df_raw
+```
+
+```{r}
+df_2v <- df_raw %>% filter(`Votación Presidencial` == 'SEGUNDA VOTACIÓN')
+df_2v
+```
+Viendo qué divisiones político-geográficas son más estables y/o comparables en el tiempo:
+```{r}
+df_2v %>% 
+  group_by(`Fecha de Elección`) %>% 
+  summarise(n_regiones = n_distinct(Región),
+            n_circuns = n_distinct(`Circunscripción Electoral`),
+            n_comunas = n_distinct(Comuna),
+            n_provincias = n_distinct(`Nombre Provincia`))
+```
+
+Haciendo el análisis por provincias:
+```{r}
+df_vot_provincias <- df_2v %>% 
+  filter(!is.na(`Sigla Partido`)) %>% 
+  count(`Fecha de Elección`, `Nombre Provincia`, `Sigla Partido`, `Candidato (a)`,
+        wt=`Votos Totales`, name="votos") %>% 
+  group_by(`Fecha de Elección`, `Nombre Provincia`) %>% 
+  mutate(perc_2v = votos/sum(votos))
+
+df_vot_provincias
+```
+Obteniendo los porcentajes nacionales para cada elección:
+```{r}
+df_2v_nacional <- df_2v %>% 
+  filter(!is.na(`Sigla Partido`)) %>% 
+  group_by(`Fecha de Elección`, `Sigla Partido`, `Candidato (a)`) %>% 
+  summarise(votos = sum(`Votos Totales`)) %>% 
+  group_by(`Fecha de Elección`) %>% 
+  mutate(perc_2v = votos/sum(votos))
+
+df_2v_nacional
+```
+
+```{r}
+df_vot_provincias_v2 <- df_vot_provincias %>%
+  left_join(df_2v_nacional %>% 
+              select(perc_2v_nac = perc_2v,
+                     `Fecha de Elección`,
+                     `Sigla Partido`,
+                     `Candidato (a)`),
+            by = c("Fecha de Elección", "Sigla Partido", "Candidato (a)")) %>% 
+  filter(perc_2v == max(perc_2v))
+  
+df_vot_provincias_v2
+```
+
+```{r}
+df_vot_provincias_v2 %>% 
+  mutate(diff_prov_nac = perc_2v - perc_2v_nac) %>% 
+  group_by(`Fecha de Elección`) %>% 
+  summarise(desv_media = mean(diff_prov_nac)) %>% 
+  ggplot(aes(`Fecha de Elección`, desv_media)) +
+  geom_point() +
+  geom_line() +
+  expand_limits(y = 0)
+```
+Me gustaría agregar los datos de las elecciones 2021 pero parece que no están en Excel o CSV
